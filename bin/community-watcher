@@ -78,9 +78,14 @@ class Source::Gree < Source
       last_comment_id: 0
     )
 
+    user_info = Pit.get(config['pit-id'], require: {
+      'mail'=> 'データ取得に使うGREEアカウントのメアド',
+      'password'=> 'password',
+    })
+
     @fetcher = GREE::Community::Fetcher.new(
-      config['mail'],
-      config['password']
+      user_info['mail'],
+      user_info['password']
     )
 
     @threads = config['threads'].map{|thread_id|
@@ -120,12 +125,18 @@ class Notifier
 end
 
 class Notifier::Jabber < Notifier
-  def initialize jid, password, room_jid
-    @room_jid = room_jid
+  def initialize config
+    nick = config['nick']
+    room = config['room']
+    user_info = Pit.get(config['pit-id'], require: {
+      'jid'=> '通知に使うJabberアカウントのJID',
+      'password'=> 'password',
+    })
+    @room_jid = ::Jabber::JID.new("#{room}/#{nick}")
     info "Connecting..."
-    @client = ::Jabber::Client.new(::Jabber::JID.new(jid))
+    @client = ::Jabber::Client.new(::Jabber::JID.new(user_info['jid']))
     @client.connect
-    @client.auth(password)
+    @client.auth(user_info['password'])
     info "Success."
 
     @muc = ::Jabber::MUC::MUCClient.new(@client)
@@ -150,21 +161,9 @@ if __FILE__ == $0
     state.merge! File.open(STATE_FILENAME){|f| YAML.load(f) }
   end
 
-  gree_user_info = Pit.get(config['gree']['pit-id'], require: {
-    'mail'=> 'データ取得に使うGREEアカウントのメアド',
-    'password'=> 'password',
-  })
-  gree = Source::Gree.new(config.merge(gree_user_info), state[:gree])
+  gree = Source::Gree.new(config['source']['gree'], state[:gree])
 
-  nick = config['jabber']['nick']
-  room = config['jabber']['room']
-  room = Jabber::JID.new("#{room}/#{nick}")
-  user_info = Pit.get(config['jabber']['pit-id'], require: {
-    'jid'=> '通知に使うJabberアカウントのJID',
-    'password'=> 'password',
-  })
-
-  notifier = Notifier::Jabber.new(user_info['jid'], user_info['password'], room)
+  notifier = Notifier::Jabber.new(config['notifier']['jabber'])
 
   puts "state: #{state.inspect}"
 
@@ -182,7 +181,7 @@ if __FILE__ == $0
     File.open(STATE_FILENAME,'w'){|f| f.puts YAML.dump(state) }
 
     puts "Sleeping"
-    sleep config['sleep_sec']
+    sleep config['general']['sleep_sec']
   end
   client.close
 end
