@@ -7,6 +7,7 @@ require 'pit'
 require 'xmpp4r'
 require 'xmpp4r/muc'
 require 'yaml'
+require 'ostruct'
 
 Jabber::debug = ENV['JABBER_DEBUG'].to_i != 0
 
@@ -50,18 +51,83 @@ end
 CONFIG_FILENAME='config.yml'
 STATE_FILENAME='state.yml'
 
+class Source
+  def initialize config, state = {}
+    @config = config
+    @state = state
+  end
+
+  def fetch_recent_comments
+    []
+  end
+
+  def info(str)
+    puts "[#{self.class.name}:INFO] #{str}"
+  end
+end
+
+class Source::Gree < Source
+  def initialize config, state
+    super
+
+    @state.merge!(
+      last_comment_id: 0
+    )
+
+    @fetcher = GREE::Community::Fetcher.new(
+      config['mail'],
+      config['password']
+    )
+
+    @threads = config['threads'].map{|thread_id|
+      GREE::Community::Thread.new(thread_id)
+    }
+  end
+
+  def fetch_recent_comments
+    update_threads!
+    comments = @threads.flat_map{|thread|
+      thread.recent_comments.select{|c| c.id > @state[:last_comment_id]}.map{|c|
+        OpenStruct.new(
+          id: c.id,
+          user_name: c.user_name,
+          thread_title: thread.title,
+          body_text: c.body_text,
+          time: c.time,
+        )
+      }
+    }
+    @state[:last_comment_id] = comments.map(&:id).max || @state[:last_comment_id]
+    comments
+  end
+
+  private
+  def update_threads!
+    info 'Updating threads'
+    @threads.each{|t|
+      t.fetch(@fetcher)
+      info "  - #{t.id} #{t.title}"
+    }
+  end
+end
+
 if __FILE__ == $0
   "#{CONFIG_FILENAME}がない" unless File.exists? CONFIG_FILENAME
-  config = Hash.new{|key|raise "設定項目#{key}がありません"}.merge! File.open(CONFIG_FILENAME){|f| YAML.load(f) }
-  threads = config['threads'].map{|thread_id|
-    GREE::Community::Thread.new(thread_id)
+  config = Hash.new{|h,key|raise "設定項目#{key.inspect}がありません"}.merge! File.open(CONFIG_FILENAME){|f| YAML.load(f) }
+
+  state = {
+    gree: {}
   }
+
+  if File.exists?(STATE_FILENAME)
+    state.merge! File.open(STATE_FILENAME){|f| YAML.load(f) }
+  end
 
   gree_user_info = Pit.get(config['gree']['pit-id'], require: {
     'mail'=> 'データ取得に使うGREEアカウントのメアド',
     'password'=> 'password',
   })
-  fetcher = GREE::Community::Fetcher.new(gree_user_info['mail'], gree_user_info['password'])
+  gree = Source::Gree.new(config.merge(gree_user_info), state[:gree])
 
   nick = config['jabber']['nick']
   room = config['jabber']['room']
@@ -70,21 +136,16 @@ if __FILE__ == $0
     'jid'=> '通知に使うJabberアカウントのJID',
     'password'=> 'password',
   })
-  puts "Connecting..."
-  client = Jabber::Client.new(Jabber::JID.new(user_info['jid']))
-  client.connect
-  client.auth(user_info['password'])
-  puts "Success."
 
-  muc = Jabber::MUC::MUCClient.new(client)
-  muc.join(room)
+  unless DRY_RUN
+    puts "Connecting..."
+    client = Jabber::Client.new(Jabber::JID.new(user_info['jid']))
+    client.connect
+    client.auth(user_info['password'])
+    puts "Success."
 
-  state = {
-    last_notified_comment_id: 0,
-  }
-
-  if File.exists?(STATE_FILENAME)
-    state.merge! File.open(STATE_FILENAME){|f| YAML.load(f) }
+    muc = Jabber::MUC::MUCClient.new(client)
+    muc.join(room)
   end
 
   puts "state: #{state.inspect}"
@@ -92,25 +153,14 @@ if __FILE__ == $0
   new_last_notified_comment_id = state[:last_notified_comment_id]
   done = false
   until done
-    puts "Updating threads"
-    threads.each{|t|
-      t.fetch(fetcher)
-      puts "  - #{t.id} #{t.title}"
-    }
-
     puts "Posting messages"
-    threads.each{|thread|
-      thread.recent_comments.select{|c| c.id > state[:last_notified_comment_id]}.each do|comment|
-        new_last_notified_comment_id = [new_last_notified_comment_id, comment.id].max
-        message = Jabber::Message.new(room, "#{comment.user_name}@#{thread.title}:\n#{comment.body_text.gsub(/\n\n+/,"\n\n")}")
-        puts "#{comment.id} by #{comment.user_name}(#{comment.time})"
-        unless DRY_RUN
-          muc.send(message)
-        end
+    gree.fetch_recent_comments.each do|comment|
+      message = Jabber::Message.new(room, "#{comment.user_name}@#{comment.thread_title}:\n#{comment.body_text.gsub(/\n\n+/,"\n\n")}")
+      puts "#{comment.id} by #{comment.user_name}(#{comment.time})"
+      unless DRY_RUN
+        muc.send(message)
       end
-    }
-    puts "updating last_notified_comment_id: #{new_last_notified_comment_id}"
-    state[:last_notified_comment_id] = new_last_notified_comment_id
+    end
 
     File.open(STATE_FILENAME,'w'){|f| f.puts YAML.dump(state) }
 
