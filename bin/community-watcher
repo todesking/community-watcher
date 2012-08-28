@@ -51,7 +51,15 @@ end
 CONFIG_FILENAME='config.yml'
 STATE_FILENAME='state.yml'
 
+module Loggable
+  def info(str)
+    puts "[#{self.class.name}:INFO] #{str}"
+  end
+end
+
 class Source
+  include Loggable
+
   def initialize config, state = {}
     @config = config
     @state = state
@@ -59,10 +67,6 @@ class Source
 
   def fetch_recent_comments
     []
-  end
-
-  def info(str)
-    puts "[#{self.class.name}:INFO] #{str}"
   end
 end
 
@@ -111,6 +115,29 @@ class Source::Gree < Source
   end
 end
 
+class Notifier
+  include Loggable
+end
+
+class Notifier::Jabber < Notifier
+  def initialize jid, password, room_jid
+    @room_jid = room_jid
+    info "Connecting..."
+    @client = ::Jabber::Client.new(::Jabber::JID.new(jid))
+    @client.connect
+    @client.auth(password)
+    info "Success."
+
+    @muc = ::Jabber::MUC::MUCClient.new(@client)
+    @muc.join(@room_jid)
+  end
+
+  def notify comment
+    message = ::Jabber::Message.new(@room_jid, "#{comment.user_name}@#{comment.thread_title}:\n#{comment.body_text.gsub(/\n\n+/,"\n\n")}")
+    @muc.send(message)
+  end
+end
+
 if __FILE__ == $0
   "#{CONFIG_FILENAME}がない" unless File.exists? CONFIG_FILENAME
   config = Hash.new{|h,key|raise "設定項目#{key.inspect}がありません"}.merge! File.open(CONFIG_FILENAME){|f| YAML.load(f) }
@@ -137,16 +164,7 @@ if __FILE__ == $0
     'password'=> 'password',
   })
 
-  unless DRY_RUN
-    puts "Connecting..."
-    client = Jabber::Client.new(Jabber::JID.new(user_info['jid']))
-    client.connect
-    client.auth(user_info['password'])
-    puts "Success."
-
-    muc = Jabber::MUC::MUCClient.new(client)
-    muc.join(room)
-  end
+  notifier = Notifier::Jabber.new(user_info['jid'], user_info['password'], room)
 
   puts "state: #{state.inspect}"
 
@@ -155,10 +173,9 @@ if __FILE__ == $0
   until done
     puts "Posting messages"
     gree.fetch_recent_comments.each do|comment|
-      message = Jabber::Message.new(room, "#{comment.user_name}@#{comment.thread_title}:\n#{comment.body_text.gsub(/\n\n+/,"\n\n")}")
       puts "#{comment.id} by #{comment.user_name}(#{comment.time})"
       unless DRY_RUN
-        muc.send(message)
+        notifier.notify(comment)
       end
     end
 
