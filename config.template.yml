@@ -1,6 +1,28 @@
-threads: # 監視対象スレッドのID
-    # - 1234 # ひとりごと
-    # - 9999 # 要望
+source:
+    gree-app1:
+        category: app1
+        type: gree
+        pit-id: gree
+        group-id: 1234
+
+    mixi-app1:
+        category: app1
+        type: mixi
+        pit-id: mixi
+        community-id: 999
+
+    gree-app2:
+        category: app1
+        type: gree
+        pit-id: gree
+        group-id: 9999
+
+notifier:
+    app1-jabber:
+        category: app1
+        type: jabber
+        pit-id: jabber-app1
+        chatroom: app1@conference.example.com
 
 sleep_sec: 300 # スレッドの更新をチェックする間隔[秒]
 

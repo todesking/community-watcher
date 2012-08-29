@@ -58,6 +58,10 @@ module Loggable
 end
 
 class Source
+  def id
+    'source'
+  end
+
   include Loggable
 
   def initialize config, state = {}
@@ -120,11 +124,45 @@ class Source::Gree < Source
   end
 end
 
-class Notifier
-  include Loggable
+class Source::Dummy < Source
+  def fetch_recent_comments
+    (1..5).to_a.map{|n|dummy_comment n}
+  end
+
+  def dummy_comment(n)
+    OpenStruct.new(
+      id: n,
+      user_name: "user #{n}",
+      thread_title: "thread #{n}",
+      body_text: "text #{n}",
+      time: Time.now,
+    )
+  end
 end
 
-class Notifier::Jabber < Notifier
+class Sink
+  def id
+    "sink"
+  end
+
+  def initialize config, state
+    @config = config
+    @state = state
+  end
+
+  include Loggable
+  
+  def notify comment
+  end
+end
+
+class Sink::Dummy < Sink
+  def notify comment
+    info comment.body_text
+  end
+end
+
+class Sink::Jabber < Sink
   def initialize config
     nick = config['nick']
     room = config['room']
@@ -149,6 +187,41 @@ class Notifier::Jabber < Notifier
   end
 end
 
+class Pipe
+  include Loggable
+  def initialize
+    @sources = []
+    @sinks = []
+    @dry_run = false
+  end
+
+  attr_accessor :dry_run
+
+  def flush
+    @sources.each do|source|
+      info "Updating: #{source.id}"
+      recent_comments = source.fetch_recent_comments
+      info "  new comments: #{recent_comments.size}"
+      recent_comments.each do|comment|
+        info "  - #{comment.id} by #{comment.user_name}(#{comment.time})"
+        @sinks.each do|sink|
+          sink.notify comment
+        end
+      end
+    end
+  end
+
+  def add_source source
+    @sources << source
+    nil
+  end
+
+  def add_sink sink
+    @sinks << sink
+    nil
+  end
+end
+
 if __FILE__ == $0
   "#{CONFIG_FILENAME}がない" unless File.exists? CONFIG_FILENAME
   config = Hash.new{|h,key|raise "設定項目#{key.inspect}がありません"}.merge! File.open(CONFIG_FILENAME){|f| YAML.load(f) }
@@ -161,22 +234,20 @@ if __FILE__ == $0
     state.merge! File.open(STATE_FILENAME){|f| YAML.load(f) }
   end
 
+  pipe = Pipe.new
+
   gree = Source::Gree.new(config['source']['gree'], state[:gree])
 
-  notifier = Notifier::Jabber.new(config['notifier']['jabber'])
+  jabber = Notifier::Jabber.new(config['notifier']['jabber'])
+
+  pipe.add_source gree
+  pipe.add_sink jabber
 
   puts "state: #{state.inspect}"
 
-  new_last_notified_comment_id = state[:last_notified_comment_id]
   done = false
   until done
-    puts "Posting messages"
-    gree.fetch_recent_comments.each do|comment|
-      puts "#{comment.id} by #{comment.user_name}(#{comment.time})"
-      unless DRY_RUN
-        notifier.notify(comment)
-      end
-    end
+    pipe.flush
 
     File.open(STATE_FILENAME,'w'){|f| f.puts YAML.dump(state) }
 
