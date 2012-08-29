@@ -39,6 +39,8 @@ source:
       end
     end
   end
+  describe 'Sinkの構築' do
+  end
 end
 
 __END__
@@ -46,8 +48,6 @@ __END__
 設定ファイルを元にグラフを構築できる
   ソースを構築できる
     typeがなかったらエラーになる
-    コンストラクタにconfig,stateを渡せる
-    stateの変更は大本に反映できる
   シンクを構築できる
     コンストラクタにconfig,stateを渡せる
     stateの変更は大本に反映できる

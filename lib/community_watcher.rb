@@ -14,33 +14,43 @@ module CommunityWatcher
     def initialize config_obj
       @config = config_obj
       @state = {
-        'source' => {}
+        'source' => {},
+        'sink' => {},
       }
-      setup_sources config_obj['source']
+
+      @sources = create_objects CommunityWatcher::Source, config_obj['source']||{}, @state['source']
+      @sinks = create_objects CommunityWatcher::Sink, config_obj['sink']||{}, @state['sink']
     end
 
     attr_reader :sources
+    attr_reader :sinks
     attr_reader :config
     attr_reader :state
 
     private
-    def setup_sources conf
-      @sources = conf.each_with_object({}) do|(source_id, source_conf), result|
-        type_name = source_conf['type'].camelize
-        type = ::CommunityWatcher::Source.const_get type_name
-        source_state = (state['source'][source_id] ||= {})
-        result[source_id] = type.new  source_conf, source_state
+    def create_objects namespace, config_root, state_root
+      config_root.each_with_object({}) do|(id, obj_conf), result|
+        type_name = obj_conf['type'].camelize
+        type = namespace.const_get type_name
+        obj_state = (state_root[id] ||= {})
+        result[id] = type.new  obj_conf, obj_state
       end
     end
   end
 
-  class Source
+  class Node
     def initialize config, state
       @config = config
       @state = state
     end
     attr_reader :config
     attr_reader :state
+  end
+
+  class Source < Node
+  end
+
+  class Sink < Node
   end
 
   class Pipe
