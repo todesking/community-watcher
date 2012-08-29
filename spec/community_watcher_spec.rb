@@ -25,6 +25,16 @@ source:
         subject.sources['source1'].should be_a(CommunityWatcher::Source::TestSource)
       end
     end
+    describe 'type(unknown)' do
+      before do
+        @config_with_invalid_typename = {'source'=>{'unk'=>{'type'=>'unk'}}}
+      end
+      it '未知のtypeが指定されてたら例外出る' do
+        e = CommunityWatcher::Config.new(@config_with_invalid_typename) rescue $!
+        e.should be_a(NameError)
+        e.message.should =~ /Unk/
+      end
+    end
     describe 'config' do
       it 'Sourceのコンストラクタに渡るconfigには、設定されたすべての値が入っている' do
         subject.sources['source1'].config.should == subject.config['source']['source1']
@@ -40,6 +50,7 @@ source:
     end
   end
   describe 'Sinkの構築' do
+    it 'sourceと同じなので略'
   end
 end
 
@@ -48,7 +59,4 @@ __END__
 設定ファイルを元にグラフを構築できる
   ソースを構築できる
     typeがなかったらエラーになる
-  シンクを構築できる
-    コンストラクタにconfig,stateを渡せる
-    stateの変更は大本に反映できる
   同一カテゴリ名のソースとシンクがパイプでつながる
