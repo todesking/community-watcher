@@ -1,10 +1,27 @@
 # -*- coding:utf-8 -*-
 
+require 'ostruct'
+
 load File.join(File.dirname(__FILE__), '..', 'lib', 'community_watcher.rb')
 
 class CommunityWatcher::Source::TestSource < CommunityWatcher::Source
+  def pull
+    [
+      OpenStruct.new(id: id, user_name: 'hoge',time: Time.now)
+    ]
+  end
 end
 class CommunityWatcher::Sink::TestSink < CommunityWatcher::Sink
+  def initialize *args
+    super
+    @pushed = []
+  end
+
+  attr_reader :pushed
+
+  def push message
+    @pushed << message
+  end
 end
 
 describe CommunityWatcher::Config do
@@ -23,6 +40,9 @@ sink:
         type: test_sink
         category: bbb
     sink2:
+        type: test_sink
+        category: aaa
+    sink3:
         type: test_sink
         category: aaa
     EOS
@@ -69,6 +89,14 @@ sink:
     it 'sourceと同じなので略'
   end
   describe 'Pipeの構築' do
+    before do
+      subject.flush
+    end
+    it 'categoryが同じ同士つながってる' do
+      subject.sinks['sink1'].pushed.should be_empty
+      subject.sinks['sink2'].pushed == ['source1']
+      subject.sinks['sink3'].pushed == ['source1']
+    end
   end
 end
 
