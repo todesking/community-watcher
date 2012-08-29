@@ -33,16 +33,19 @@ module CommunityWatcher
         type_name = obj_conf['type'].camelize
         type = namespace.const_get type_name
         obj_state = (state_root[id] ||= {})
-        result[id] = type.new  obj_conf, obj_state
+        result[id] = type.new id, obj_conf, obj_state
       end
     end
   end
 
   class Node
-    def initialize config, state
+    def initialize id, config, state
+      @id = id
       @config = config
       @state = state
     end
+
+    attr_reader :id
     attr_reader :config
     attr_reader :state
   end

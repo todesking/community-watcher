@@ -4,6 +4,8 @@ load File.join(File.dirname(__FILE__), '..', 'lib', 'community_watcher.rb')
 
 class CommunityWatcher::Source::TestSource < CommunityWatcher::Source
 end
+class CommunityWatcher::Sink::TestSink < CommunityWatcher::Sink
+end
 
 describe CommunityWatcher::Config do
   before do
@@ -14,6 +16,15 @@ source:
         category: aaa
         attr1: 1
         attr2: hogehoge
+    source2:
+        type: test_source
+sink:
+    sink1:
+        type: test_sink
+        category: bbb
+    sink2:
+        type: test_sink
+        category: aaa
     EOS
   end
 
@@ -48,9 +59,16 @@ source:
         subject.state['source']['source1']['hoge'].should == 'fuga'
       end
     end
+    describe 'id' do
+      it 'IDが設定されている' do
+        subject.sources['source1'].id.should == 'source1'
+      end
+    end
   end
   describe 'Sinkの構築' do
     it 'sourceと同じなので略'
+  end
+  describe 'Pipeの構築' do
   end
 end
 
