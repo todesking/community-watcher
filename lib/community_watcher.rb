@@ -1,5 +1,7 @@
 # -*- coding:utf-8 -*-
 
+require 'yaml'
+require 'ostruct'
 require 'active_support/inflector'
 
 module CommunityWatcher
@@ -45,7 +47,7 @@ module CommunityWatcher
         result[id] = type.new id, obj_conf, obj_state
       end
     end
-    
+
     def create_pipes
       pipes = {}
       @sources.each do|id, source|
@@ -128,5 +130,8 @@ module CommunityWatcher
       @sinks << sink
       nil
     end
+  end
+
+  class Message
   end
 end

@@ -3,14 +3,6 @@
 
 load File.join(File.dirname(__FILE__), '..', 'vendor', 'gree-community', 'lib', 'gree-community.rb')
 
-require 'pit'
-require 'xmpp4r'
-require 'xmpp4r/muc'
-require 'yaml'
-require 'ostruct'
-
-Jabber::debug = ENV['JABBER_DEBUG'].to_i != 0
-
 # メッセージの送出を行わない
 DRY_RUN = ENV['DRY_RUN'].to_i != 0
 
@@ -51,185 +43,15 @@ end
 CONFIG_FILENAME='config.yml'
 STATE_FILENAME='state.yml'
 
-module Loggable
-  def info(str)
-    puts "[#{self.class.name}:INFO] #{str}"
-  end
-end
-
-class Source
-  def id
-    'source'
-  end
-
-  include Loggable
-
-  def initialize config, state = {}
-    @config = config
-    @state = state
-  end
-
-  def fetch_recent_comments
-    []
-  end
-end
-
-class Source::Gree < Source
-  def initialize config, state
-    super
-
-    @state.merge!(
-      last_comment_id: 0
-    )
-
-    user_info = Pit.get(config['pit-id'], require: {
-      'mail'=> 'データ取得に使うGREEアカウントのメアド',
-      'password'=> 'password',
-    })
-
-    @fetcher = GREE::Community::Fetcher.new(
-      user_info['mail'],
-      user_info['password']
-    )
-
-    @threads = config['threads'].map{|thread_id|
-      GREE::Community::Thread.new(thread_id)
-    }
-  end
-
-  def fetch_recent_comments
-    update_threads!
-    comments = @threads.flat_map{|thread|
-      thread.recent_comments.select{|c| c.id > @state[:last_comment_id]}.map{|c|
-        OpenStruct.new(
-          id: c.id,
-          user_name: c.user_name,
-          thread_title: thread.title,
-          body_text: c.body_text,
-          time: c.time,
-        )
-      }
-    }
-    @state[:last_comment_id] = comments.map(&:id).max || @state[:last_comment_id]
-    comments
-  end
-
-  private
-  def update_threads!
-    info 'Updating threads'
-    @threads.each{|t|
-      t.fetch(@fetcher)
-      info "  - #{t.id} #{t.title}"
-    }
-  end
-end
-
-class Source::Dummy < Source
-  def fetch_recent_comments
-    (1..5).to_a.map{|n|dummy_comment n}
-  end
-
-  def dummy_comment(n)
-    OpenStruct.new(
-      id: n,
-      user_name: "user #{n}",
-      thread_title: "thread #{n}",
-      body_text: "text #{n}",
-      time: Time.now,
-    )
-  end
-end
-
-class Sink
-  def id
-    "sink"
-  end
-
-  def initialize config, state
-    @config = config
-    @state = state
-  end
-
-  include Loggable
-  
-  def notify comment
-  end
-end
-
-class Sink::Dummy < Sink
-  def notify comment
-    info comment.body_text
-  end
-end
-
-class Sink::Jabber < Sink
-  def initialize config
-    nick = config['nick']
-    room = config['room']
-    user_info = Pit.get(config['pit-id'], require: {
-      'jid'=> '通知に使うJabberアカウントのJID',
-      'password'=> 'password',
-    })
-    @room_jid = ::Jabber::JID.new("#{room}/#{nick}")
-    info "Connecting..."
-    @client = ::Jabber::Client.new(::Jabber::JID.new(user_info['jid']))
-    @client.connect
-    @client.auth(user_info['password'])
-    info "Success."
-
-    @muc = ::Jabber::MUC::MUCClient.new(@client)
-    @muc.join(@room_jid)
-  end
-
-  def notify comment
-    message = ::Jabber::Message.new(@room_jid, "#{comment.user_name}@#{comment.thread_title}:\n#{comment.body_text.gsub(/\n\n+/,"\n\n")}")
-    @muc.send(message)
-  end
-end
-
-class Pipe
-  include Loggable
-  def initialize
-    @sources = []
-    @sinks = []
-    @dry_run = false
-  end
-
-  attr_accessor :dry_run
-
-  def flush
-    @sources.each do|source|
-      info "Updating: #{source.id}"
-      recent_comments = source.fetch_recent_comments
-      info "  new comments: #{recent_comments.size}"
-      recent_comments.each do|comment|
-        info "  - #{comment.id} by #{comment.user_name}(#{comment.time})"
-        @sinks.each do|sink|
-          sink.notify comment
-        end
-      end
-    end
-  end
-
-  def add_source source
-    @sources << source
-    nil
-  end
-
-  def add_sink sink
-    @sinks << sink
-    nil
-  end
-end
 
 if __FILE__ == $0
   "#{CONFIG_FILENAME}がない" unless File.exists? CONFIG_FILENAME
   config = Hash.new{|h,key|raise "設定項目#{key.inspect}がありません"}.merge! File.open(CONFIG_FILENAME){|f| YAML.load(f) }
 
   state = {
-    gree: {}
+    source: {},
+    sink: {},
   }
-
   if File.exists?(STATE_FILENAME)
     state.merge! File.open(STATE_FILENAME){|f| YAML.load(f) }
   end
