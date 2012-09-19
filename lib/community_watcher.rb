@@ -4,6 +4,9 @@ require 'yaml'
 require 'ostruct'
 require 'active_support/inflector'
 
+$: << File.join(File.dirname(__FILE__), '../vendor/typedocs/lib')
+require 'typedocs'
+
 module CommunityWatcher
   module Loggable
     private
@@ -13,6 +16,9 @@ module CommunityWatcher
   end
 
   class Config
+    include Typedocs::DSL
+
+    tdoc!"Hash ->"
     def initialize config_obj
       @config = config_obj
       @state = {
@@ -25,9 +31,16 @@ module CommunityWatcher
       @pipes = create_pipes
     end
 
+    tdoc!"Hash"
     attr_reader :sources
+
+    tdoc!"Hash"
     attr_reader :sinks
+
+    tdoc!"Hash"
     attr_reader :config
+
+    tdoc!"{'source': Hash, 'sink': Hash}"
     attr_reader :state
 
     def flush
@@ -39,6 +52,7 @@ module CommunityWatcher
     end
 
     private
+    tdoc!"Class -> Hash -> Hash -> Hash"
     def create_objects namespace, config_root, state_root
       config_root.each_with_object({}) do|(id, obj_conf), result|
         type_name = obj_conf['type'].camelize
@@ -69,6 +83,9 @@ module CommunityWatcher
   end
 
   class Node
+    include Typedocs::DSL
+
+    tdoc!"String -> Hash -> Hash ->"
     def initialize id, config, state
       @id = id
       @config = config
@@ -79,6 +96,8 @@ module CommunityWatcher
     attr_reader :config
     attr_reader :state
 
+    # TODO: bug?
+    # tdoc!"String"
     def category
       config['category']
     end

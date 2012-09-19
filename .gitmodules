@@ -1,3 +1,6 @@
 [submodule "vendor/gree-community"]
 	path = vendor/gree-community
 	url = git@github.com:todesking/gree-community.git
+[submodule "vendor/typedocs"]
+	path = vendor/typedocs
+	url = git@github.com:todesking/typedocs.git
