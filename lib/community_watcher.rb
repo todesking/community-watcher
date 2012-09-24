@@ -62,6 +62,7 @@ module CommunityWatcher
       end
     end
 
+    tdoc!"Hash"
     def create_pipes
       pipes = {}
       @sources.each do|id, source|
@@ -92,8 +93,13 @@ module CommunityWatcher
       @state = state
     end
 
+    tdoc!"String"
     attr_reader :id
+
+    tdoc!"Hash"
     attr_reader :config
+
+    tdoc!"Hash"
     attr_reader :state
 
     # TODO: bug?
@@ -115,17 +121,21 @@ module CommunityWatcher
   end
 
   class Pipe
+    include Typedocs::DSL
     include Loggable
 
+    tdoc!"String ->"
     def initialize id
       @sources = []
       @sinks = []
       @dry_run = false
     end
 
+    tdoc!"String"
     attr_reader :id
     attr_accessor :dry_run
 
+    tdoc!""
     def flush
       @sources.each do|source|
         info "Updating: #{source.id}"
@@ -140,11 +150,13 @@ module CommunityWatcher
       end
     end
 
+    tdoc!"Source->"
     def add_source source
       @sources << source
       nil
     end
 
+    tdoc!"Sink->"
     def add_sink sink
       @sinks << sink
       nil
