@@ -31,16 +31,16 @@ module CommunityWatcher
       @pipes = create_pipes
     end
 
-    tdoc!"Hash"
+    tdoc!"{source_id:String => Source}"
     attr_reader :sources
 
-    tdoc!"Hash"
+    tdoc!"{sink_id:String => Sink}"
     attr_reader :sinks
 
     tdoc!"Hash"
     attr_reader :config
 
-    tdoc!"{'source': Hash, 'sink': Hash}"
+    tdoc!"{'source' => {source_id:String => Hash}, 'sink' => {sink_id:String => Hash}}"
     attr_reader :state
 
     def flush
@@ -52,7 +52,7 @@ module CommunityWatcher
     end
 
     private
-    tdoc!"Class -> Hash -> Hash -> Hash"
+    tdoc!"Class -> config_root:{plugin_id:String => plugin_config:{key:String => *}} -> state_root:{plugin_id:String => state:Hash} -> {plugin_id:String => plugin:Source|Sink}"
     def create_objects namespace, config_root, state_root
       config_root.each_with_object({}) do|(id, obj_conf), result|
         type_name = obj_conf['type'].camelize
@@ -62,7 +62,7 @@ module CommunityWatcher
       end
     end
 
-    tdoc!"Hash"
+    tdoc!"{pipe_id:String => Pipe}"
     def create_pipes
       pipes = {}
       @sources.each do|id, source|
@@ -86,7 +86,7 @@ module CommunityWatcher
   class Node
     include Typedocs::DSL
 
-    tdoc!"String -> Hash -> Hash ->"
+    tdoc!"String -> {String => *} -> Hash ->"
     def initialize id, config, state
       @id = id
       @config = config
@@ -96,7 +96,7 @@ module CommunityWatcher
     tdoc!"String"
     attr_reader :id
 
-    tdoc!"Hash"
+    tdoc!"{String => *}"
     attr_reader :config
 
     tdoc!"Hash"
